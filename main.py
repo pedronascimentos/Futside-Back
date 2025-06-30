@@ -19,6 +19,7 @@ from sqlalchemy.ext.hybrid import hybrid_property
 from passlib.context import CryptContext
 from jose import JWTError, jwt
 from dotenv import load_dotenv
+from decimal import Decimal # Adicione esta importação no topo do arquivo
 
 
 # --- 1. CONFIGURAÇÕES E INICIALIZAÇÕES ---
@@ -705,14 +706,24 @@ def get_field_details(field_id: int, db: Session = Depends(get_db)):
     db_field = db.query(Field).filter(Field.id == field_id).first()
     if not db_field:
         raise HTTPException(status_code=404, detail="Quadra não encontrada")
-    return db_field
+    
+    # Construção manual para evitar erros de tipo
+    # Nota: Pydantic lida bem com a conversão de Decimal para float na instanciação
+    return FieldOut.model_validate(db_field)
 
 @app.get("/fields/me", response_model=List[FieldOut], tags=["Fields & Feed"])
 def get_my_fields(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     locador = db.query(Locador).filter(Locador.user_id == current_user.id).first()
     if not locador:
         return []
-    return db.query(Field).filter(Field.locador_id == locador.id).all()
+        
+    db_fields = db.query(Field).filter(Field.locador_id == locador.id).all()
+    
+    # Construção manual da lista de resposta
+    # Isso força a validação e conversão correta para cada item
+    response_fields = [FieldOut.model_validate(field) for field in db_fields]
+    
+    return response_fields
 
 @app.post("/fields/", response_model=FieldOut, tags=["Fields & Feed"])
 def create_field(
