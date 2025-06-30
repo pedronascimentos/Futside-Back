@@ -417,20 +417,29 @@ async def send_batch_push_notifications(tokens: List[str], title: str, body: str
         return False
 
 # --- 6. CONFIGURAÇÃO MQTT MELHORADA ---
-MQTT_BROKER_HOST = os.getenv("MQTT_BROKER_HOST", "localhost")
-MQTT_BROKER_PORT = int(os.getenv("MQTT_BROKER_PORT", 1883))
+MQTT_BROKER_HOST = os.getenv("MQTT_BROKER_HOST")
+MQTT_BROKER_PORT = int(os.getenv("MQTT_BROKER_PORT", 8883)) # Porta segura como padrão
+MQTT_USERNAME = os.getenv("MQTT_USERNAME")
+MQTT_PASSWORD = os.getenv("MQTT_PASSWORD")
 MQTT_TOPIC_REGIONAL_BASE = "futside/matches"
 MQTT_TOPIC_MATCH_BASE = "futside/match"
-
-# Cliente MQTT Global
-mqtt_client = None
-mqtt_connected = False
+# ... (cliente global, etc.) ...
 
 def setup_mqtt_client():
     global mqtt_client, mqtt_connected
     
     mqtt_client = paho.Client(client_id=f"fastapi_publisher_{int(time.time())}")
     
+    # 1. Configura o usuário e senha para autenticação (OBRIGATÓRIO para HiveMQ Cloud)
+    if MQTT_USERNAME and MQTT_PASSWORD:
+        print("Configurando autenticação MQTT...")
+        mqtt_client.username_pw_set(MQTT_USERNAME, MQTT_PASSWORD)
+    
+    # 2. Habilita a conexão segura (TLS) (OBRIGATÓRIO para HiveMQ Cloud na porta 8883)
+    print("Habilitando conexão segura TLS para MQTT...")
+    mqtt_client.tls_set()
+
+    # Callbacks (on_connect, on_disconnect, etc.) permanecem os mesmos
     def on_connect(client, userdata, flags, rc, properties=None):
         global mqtt_connected
         if rc == 0:
@@ -438,7 +447,8 @@ def setup_mqtt_client():
             print(f"✅ Conectado ao Broker MQTT em {MQTT_BROKER_HOST}:{MQTT_BROKER_PORT}")
         else:
             mqtt_connected = False
-            print(f"❌ Falha ao conectar ao Broker MQTT, código: {rc}")
+            # Códigos de erro comuns: 4 = bad username/password, 5 = not authorized
+            print(f"❌ Falha ao conectar ao Broker MQTT, código de retorno: {rc}")
     
     def on_disconnect(client, userdata, rc):
         global mqtt_connected
@@ -457,7 +467,7 @@ def setup_mqtt_client():
         mqtt_client.loop_start()
         return True
     except Exception as e:
-        print(f"❌ ERRO: Não foi possível conectar ao Broker MQTT: {e}")
+        print(f"❌ ERRO ao tentar conectar ao Broker MQTT: {e}")
         mqtt_connected = False
         return False
 
